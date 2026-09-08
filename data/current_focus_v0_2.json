@@ -1,0 +1,63 @@
+{
+  "schema": "axm.matter-transfer-current-focus.v1",
+  "date": "2026-09-02",
+  "status": "speculative_research",
+  "claim_ceiling": "No physical macroscopic matter-transfer mechanism is established.",
+  "primary_target": {
+    "id": "continuous_adjacency_transfer",
+    "description": "Investigate whether ordinary matter can traverse a continuous physical path between macroscopically separated regions if a physically admissible geometry/state makes their effective traversed separation radically shorter.",
+    "same_matter_continuity_required": true,
+    "scan_destroy_reconstruct_is_primary_target": false,
+    "closest_legacy_modes": ["MT-6", "MT-5"]
+  },
+  "required_distinctions": [
+    "continuous matter path vs reconstructed copy",
+    "mathematical solution vs physical realizability",
+    "stability vs traversability",
+    "model support matter vs known controllable matter",
+    "quantum-state teleportation vs matter transport",
+    "accessibility vs transition friction",
+    "simulation success vs physical evidence"
+  ],
+  "current_status": {
+    "wormhole_geometries_mathematically_studied": true,
+    "traversable_theoretical_constructions_exist": true,
+    "serious_physical_restrictions_exist": true,
+    "macroscopic_engineered_demo_exists": false,
+    "known_general_actuator_exists": false,
+    "universal_impossibility_proof_recorded_here": false,
+    "summary": "MATHEMATICALLY_ACTIVE__PHYSICALLY_UNRESOLVED__ENGINEERING_PATH_UNKNOWN"
+  },
+  "research_gates": [
+    "variables_and_units",
+    "explicit_geometry_and_boundary_conditions",
+    "known_physics_recovery_domain",
+    "stress_energy_or_support_assumptions",
+    "energy_condition_and_qei_analysis_where_applicable",
+    "causal_structure",
+    "stability",
+    "continuous_worldline_or_path_contract",
+    "quantitative_predeclared_prediction",
+    "falsifier",
+    "alternative_explanations",
+    "independent_literature_comparison",
+    "claim_ceiling"
+  ],
+  "near_term_scope": [
+    "literature mapping",
+    "published toy-model reproduction",
+    "equation and assumption comparison",
+    "simulation",
+    "causal and path analysis",
+    "source registry",
+    "contradiction mapping",
+    "falsification design"
+  ],
+  "disabled_scope": [
+    "biological subjects",
+    "destructive experiments",
+    "weapon or confinement use",
+    "uncontrolled physical hardware",
+    "claim promotion without evidence"
+  ]
+}
