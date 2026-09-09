@@ -70,7 +70,7 @@ class ResearchCapsuleTests(unittest.TestCase):
         plan = json.loads(plan_path.read_text(encoding="utf-8"))
         plan["enabled"] = not plan["enabled"]
         plan_path.write_text(json.dumps(plan, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-        with self.assertRaisesRegex(ValueError, "sha256 mismatch"):
+        with self.assertRaisesRegex(ValueError, r"(byte count|sha256) mismatch"):
             verify_capsule(self.capsule)
 
     def test_resealed_source_substitution_still_breaks_plan_lineage(self):
