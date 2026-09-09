@@ -1,0 +1,27 @@
+name: Research state contract
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Run state-contract tests
+        run: python -m unittest discover -s tests -v
+      - name: Validate canonical focus and preserved registry
+        run: python tools/research_state.py validate
+      - name: Resolve every assembly profile
+        shell: bash
+        run: |
+          for profile in research_notebook deterministic_simulator observer_game_layer non_destructive_experimental_bench; do
+            python tools/research_state.py resolve-profile "$profile" > "/tmp/${profile}.json"
+          done

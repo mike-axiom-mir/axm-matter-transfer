@@ -1,0 +1,96 @@
+{
+  "schema": "axm.matter-transfer-validation-contract.v1",
+  "contract_version": "1.0.0",
+  "inputs": {
+    "focus": {
+      "path": "data/current_focus_v0_2.json",
+      "schema": "axm.matter-transfer-current-focus.v1"
+    },
+    "registry": {
+      "path": "provenance/factual-space-pr2/data/matter_transfer_organ_registry_v0_1.json",
+      "schema": "axm.matter-transfer-organ-registry.v1",
+      "authority": "preserved_historical_source"
+    }
+  },
+  "focus": {
+    "allowed_statuses": [
+      "speculative_research"
+    ],
+    "primary_target": {
+      "id": "continuous_adjacency_transfer",
+      "requires_true": [
+        "same_matter_continuity_required"
+      ],
+      "requires_false": [
+        "scan_destroy_reconstruct_is_primary_target"
+      ]
+    },
+    "required_research_gates": [
+      "variables_and_units",
+      "explicit_geometry_and_boundary_conditions",
+      "known_physics_recovery_domain",
+      "causal_structure",
+      "stability",
+      "continuous_worldline_or_path_contract",
+      "quantitative_predeclared_prediction",
+      "falsifier",
+      "alternative_explanations",
+      "independent_literature_comparison",
+      "claim_ceiling"
+    ],
+    "required_disabled_scope": [
+      "biological subjects",
+      "destructive experiments",
+      "weapon or confinement use",
+      "uncontrolled physical hardware",
+      "claim promotion without evidence"
+    ],
+    "status_rules": [
+      {
+        "when": {
+          "wormhole_geometries_mathematically_studied": true,
+          "traversable_theoretical_constructions_exist": true,
+          "serious_physical_restrictions_exist": true,
+          "macroscopic_engineered_demo_exists": false,
+          "known_general_actuator_exists": false,
+          "universal_impossibility_proof_recorded_here": false
+        },
+        "summary": "MATHEMATICALLY_ACTIVE__PHYSICALLY_UNRESOLVED__ENGINEERING_PATH_UNKNOWN"
+      }
+    ]
+  },
+  "registry": {
+    "required_truth_boundary_true": [
+      "simulation_first",
+      "no_live_or_biological_subjects",
+      "no_destructive_scanning",
+      "no_weapon_or_harmful_hardware_path",
+      "unknown_is_not_pass",
+      "visual_similarity_is_not_state_identity",
+      "model_success_is_not_physical_validation",
+      "no_silent_claim_promotion"
+    ],
+    "transfer_mode_classes": {
+      "MT-0": "grounded",
+      "MT-1": "grounded",
+      "MT-2": "grounded",
+      "MT-3": "grounded_with_scope_limit",
+      "MT-4": "modeling_speculative",
+      "MT-5": "speculative",
+      "MT-6": "speculative"
+    },
+    "required_organ_fields": [
+      "id",
+      "name",
+      "layer",
+      "epistemic_class",
+      "purpose",
+      "inputs",
+      "outputs",
+      "depends_on",
+      "hard_gates",
+      "failure_state",
+      "tests"
+    ]
+  }
+}
