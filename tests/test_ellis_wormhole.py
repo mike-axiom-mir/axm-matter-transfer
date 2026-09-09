@@ -56,6 +56,81 @@ class EllisWormholeExperimentTests(unittest.TestCase):
         with self.assertRaisesRegex(ContractError, "between 32 and 1000000"):
             run_experiment(changed)
 
+    def test_cli_rejects_duplicate_input_keys_before_model_admission(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            duplicate_input = Path(temporary) / "duplicate-input.json"
+            receipt_path = Path(temporary) / "receipt.json"
+            fixture_text = FIXTURE.read_text(encoding="utf-8")
+            duplicate_input.write_text(
+                fixture_text.replace(
+                    '  "model": "ellis-zero-mass-wormhole",',
+                    '  "model": "engineering-portal",\n  "model": "ellis-zero-mass-wormhole",',
+                    1,
+                ),
+                encoding="utf-8",
+            )
+            run = subprocess.run(
+                [sys.executable, str(EXPERIMENT), "run", "--input", str(duplicate_input), "--output", str(receipt_path)],
+                cwd=ROOT,
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(run.returncode, 2, run.stderr)
+            self.assertIn("duplicate JSON object key: model", run.stderr)
+            self.assertFalse(receipt_path.exists())
+
+    def test_cli_rejects_oversized_json_before_semantic_validation(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            oversized_input = Path(temporary) / "oversized-input.json"
+            receipt_path = Path(temporary) / "receipt.json"
+            oversized_input.write_text(
+                (" " * (1024 * 1024 + 1)) + FIXTURE.read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+            run = subprocess.run(
+                [sys.executable, str(EXPERIMENT), "run", "--input", str(oversized_input), "--output", str(receipt_path)],
+                cwd=ROOT,
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(run.returncode, 2, run.stderr)
+            self.assertIn("exceeds 1048576-byte limit", run.stderr)
+            self.assertFalse(receipt_path.exists())
+
+    def test_cli_verify_rejects_duplicate_keys_in_receipt_bytes(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            receipt_path = Path(temporary) / "receipt.json"
+            ambiguous_receipt = Path(temporary) / "ambiguous-receipt.json"
+            run = subprocess.run(
+                [sys.executable, str(EXPERIMENT), "run", "--input", str(FIXTURE), "--output", str(receipt_path)],
+                cwd=ROOT,
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(run.returncode, 0, run.stderr)
+            receipt_text = receipt_path.read_text(encoding="utf-8")
+            marker = '"status":"PASS"'
+            marker_index = receipt_text.rfind(marker)
+            self.assertGreaterEqual(marker_index, 0)
+            ambiguous_receipt.write_text(
+                receipt_text[:marker_index]
+                + '"status":"HOLD","status":"PASS"'
+                + receipt_text[marker_index + len(marker):],
+                encoding="utf-8",
+            )
+            verify = subprocess.run(
+                [sys.executable, str(EXPERIMENT), "verify", "--input", str(FIXTURE), "--receipt", str(ambiguous_receipt)],
+                cwd=ROOT,
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(verify.returncode, 2, verify.stderr)
+            self.assertIn("duplicate JSON object key: status", verify.stderr)
+
     def test_receipt_tampering_and_resealed_false_result_fail_reexecution(self) -> None:
         receipt = run_experiment(self.fixture)
         tampered = copy.deepcopy(receipt)
