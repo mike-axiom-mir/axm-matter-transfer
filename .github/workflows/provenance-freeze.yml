@@ -1,0 +1,21 @@
+name: Migration provenance freeze
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  provenance:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+      - name: Run provenance regression tests
+        run: python3 -m unittest discover -s tests -v
+      - name: Verify preserved migration identities
+        run: python3 tools/verify_migration_provenance.py --json
