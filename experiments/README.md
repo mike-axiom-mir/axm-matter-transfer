@@ -34,6 +34,24 @@ The output path is no-replace. Verification checks the receipt digest and then
 re-executes the experiment; changing a result and recalculating its digest is
 therefore insufficient.
 
+### Human-readable receipt observer
+
+After producing a receipt, render that already-verified evidence into one offline
+HTML file:
+
+```bash
+python3 experiments/ellis_geometry_viewer.py \
+  --input experiments/fixtures/ellis_zero_mass_v1.json \
+  --receipt /tmp/ellis-receipt.json \
+  --output /tmp/ellis-viewer.html
+```
+
+The viewer calls the experiment's deterministic verifier before it writes HTML.
+Its charts use only recorded receipt samples; connecting lines are orientation
+guides, not extra model samples. The page is a presentation layer only: it has
+no network dependency, does not execute the physics model, and cannot promote
+any scientific, engineering, merge, or CANON claim.
+
 ### Sources and adaptation
 
 - H. G. Ellis, “Ether flow through a drainhole: A particle model in general
