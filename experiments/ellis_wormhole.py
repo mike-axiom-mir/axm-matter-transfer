@@ -303,7 +303,8 @@ def _reject_nonstandard_constant(token: str) -> Any:
 
 def _read_json(path: Path) -> Any:
     try:
-        data = path.read_bytes()
+        with path.open("rb") as stream:
+            data = stream.read(MAX_JSON_BYTES + 1)
     except OSError as exc:
         raise ContractError(f"cannot read JSON from {path}: {exc}") from exc
     if len(data) > MAX_JSON_BYTES:
