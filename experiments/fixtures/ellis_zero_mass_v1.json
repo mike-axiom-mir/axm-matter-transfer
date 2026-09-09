@@ -1,0 +1,20 @@
+{
+  "schema": "axm.matter-transfer.ellis-wormhole.input/v1",
+  "model": "ellis-zero-mass-wormhole",
+  "units": "geometrized_G_equals_c_equals_1",
+  "throat_radius": 2.0,
+  "stations": {
+    "left_l": -6.0,
+    "right_l": 6.0
+  },
+  "samples_l": [-6.0, -2.0, 0.0, 2.0, 6.0],
+  "integration_intervals": 4096,
+  "tolerance": 1e-10,
+  "predictions": {
+    "throat_areal_radius": 2.0,
+    "station_to_station_proper_distance": 12.0,
+    "right_station_areal_radius": 6.324555320337,
+    "right_embedding_height": 3.636892918464,
+    "throat_scaled_nec": -2.0
+  }
+}
