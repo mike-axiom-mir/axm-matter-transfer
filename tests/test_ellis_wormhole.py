@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import copy
 import json
+import os
 import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 
@@ -14,6 +16,7 @@ EXPERIMENT = ROOT / "experiments" / "ellis_wormhole.py"
 FIXTURE = ROOT / "experiments" / "fixtures" / "ellis_zero_mass_v1.json"
 sys.path.insert(0, str(EXPERIMENT.parent))
 
+import ellis_wormhole  # noqa: E402
 from ellis_wormhole import ContractError, run_experiment, verify_receipt  # noqa: E402
 
 
@@ -199,6 +202,36 @@ class EllisWormholeExperimentTests(unittest.TestCase):
             self.assertIn("refusing to overwrite", run.stderr)
             self.assertTrue(output.is_symlink())
             self.assertFalse(redirected.exists())
+
+    def test_interrupted_receipt_write_never_exposes_partial_final_path(self) -> None:
+        class InterruptedStream:
+            def __init__(self, descriptor: int):
+                self.descriptor = descriptor
+
+            def __enter__(self) -> "InterruptedStream":
+                return self
+
+            def write(self, data: bytes) -> None:
+                os.write(self.descriptor, data[:17])
+                raise OSError("injected interrupted receipt write")
+
+            def __exit__(self, *_args: object) -> None:
+                os.close(self.descriptor)
+
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary) / "receipt.json"
+            original_fdopen = os.fdopen
+
+            def interrupt(descriptor: int, *_args: object, **_kwargs: object) -> InterruptedStream:
+                return InterruptedStream(descriptor)
+
+            with mock.patch.object(ellis_wormhole.os, "fdopen", side_effect=interrupt):
+                with self.assertRaisesRegex(ContractError, "cannot write output"):
+                    ellis_wormhole._write_json(output, run_experiment(self.fixture))
+
+            self.assertFalse(output.exists())
+            self.assertEqual(list(output.parent.glob(f".{output.name}.*.tmp")), [])
+            self.assertIsNotNone(original_fdopen)
 
 
 if __name__ == "__main__":
