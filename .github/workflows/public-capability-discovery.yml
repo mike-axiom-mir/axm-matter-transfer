@@ -151,14 +151,15 @@ jobs:
           assert capability["id"] == "axm.matter-transfer.ellis-wormhole.experiment/v1"
           assert capability["status"] is None
           assert capability["providers"] == ["mike-axiom-mir/axm-matter-transfer"]
-          assert capability["truth"]["physicalMacroscopicMatterTransferEstablished"] is False
-          assert capability["truth"]["claimCeiling"] == "NO_PHYSICAL_MACROSCOPIC_MATTER_TRANSFER_MECHANISM_ESTABLISHED"
+          source_record = json.loads(Path("registry/capabilities.jsonl").read_text(encoding="utf-8"))
+          assert source_record["truth"]["physicalMacroscopicMatterTransferEstablished"] is False
+          assert source_record["truth"]["claimCeiling"] == "NO_PHYSICAL_MACROSCOPIC_MATTER_TRANSFER_MECHANISM_ESTABLISHED"
           print(json.dumps({
               "matches": 1,
               "provider": candidate["repository"],
               "capability": capability["id"],
               "status": capability["status"],
-              "claim_ceiling": capability["truth"]["claimCeiling"],
+              "claim_ceiling": source_record["truth"]["claimCeiling"],
               "authority": query["authority"]["classification"],
               "discovery_source_checkout_present": False,
           }, sort_keys=True))
