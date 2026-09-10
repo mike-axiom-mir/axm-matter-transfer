@@ -34,6 +34,41 @@ The output path is no-replace. Verification checks the receipt digest and then
 re-executes the experiment; changing a result and recalculating its digest is
 therefore insufficient.
 
+### Portable single-file runner
+
+The same experiment can be packaged as one deterministic Python zipapp without
+copying or rewriting the model by hand:
+
+```bash
+python3 tools/build_ellis_zipapp.py build \
+  --output /tmp/ellis-wormhole.pyz \
+  --receipt /tmp/ellis-wormhole.build.json
+
+python3 tools/build_ellis_zipapp.py verify \
+  --artifact /tmp/ellis-wormhole.pyz \
+  --receipt /tmp/ellis-wormhole.build.json \
+  --source experiments/ellis_wormhole.py
+```
+
+The `.pyz` contains the exact current `ellis_wormhole.py` bytes, a minimal
+entrypoint, and bounded machine-readable metadata. It needs only Python 3.11+
+and the standard library. Copy the `.pyz` plus an input JSON file to another
+local directory and run the same `run` / `verify` commands directly against the
+artifact; no repository checkout, package install, account, network, or AI
+model is required at execution time.
+
+The build receipt binds the artifact and packaged provider source by SHA-256.
+The verifier also checks the exact member inventory, stored-member policy,
+entrypoint, embedded metadata, and (when supplied) byte equality with the
+provider source. Re-sealing an artifact with an extra member therefore does not
+make the widened artifact admissible. SHA-256 here is integrity/lineage
+evidence, not authorship authentication or a signature.
+
+This distribution seam applies the same AXM principle used by verified portable
+capsules—carry exact source/evidence with the thing that leaves its checkout—but
+it does not copy implementation code from another repository or create a
+shared runtime dependency.
+
 ### Sources and adaptation
 
 - H. G. Ellis, “Ether flow through a drainhole: A particle model in general
@@ -51,5 +86,7 @@ only equations declared in the receipt and Python’s standard library.
 `PASS` means the bounded computational reproduction met its declared gates.
 It does **not** establish stability, quantum-field compatibility, a source for
 the required stress-energy, an actuator, engineering feasibility, physical
-matter transfer, merge authority, or CANON. No biological, destructive,
-weapon, confinement, or hardware experiment is included.
+matter transfer, merge authority, or CANON. Packaging the experiment changes
+none of those claims and grants no automatic execution authority. No
+biological, destructive, weapon, confinement, or hardware experiment is
+included.
