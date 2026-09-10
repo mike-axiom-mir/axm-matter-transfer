@@ -1,0 +1,81 @@
+name: Ellis portable experiment
+
+on:
+  pull_request:
+    paths:
+      - "experiments/ellis_wormhole.py"
+      - "experiments/fixtures/ellis_zero_mass_v1.json"
+      - "experiments/README.md"
+      - "tools/build_ellis_zipapp.py"
+      - "tests/test_ellis_wormhole.py"
+      - "tests/test_ellis_portable.py"
+      - ".github/workflows/ellis-portable.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  portable:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.11", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Compile experiment, packager, and tests
+        run: |
+          python -m py_compile \
+            experiments/ellis_wormhole.py \
+            tools/build_ellis_zipapp.py \
+            tests/test_ellis_wormhole.py \
+            tests/test_ellis_portable.py
+      - name: Run complete experiment suite
+        run: python -m unittest discover -s tests -v
+      - name: Build deterministic portable artifact
+        run: |
+          mkdir -p dist
+          python tools/build_ellis_zipapp.py build \
+            --output dist/ellis-wormhole.pyz \
+            --receipt dist/ellis-wormhole.build.json
+      - name: Verify artifact against provider source
+        run: |
+          python tools/build_ellis_zipapp.py verify \
+            --artifact dist/ellis-wormhole.pyz \
+            --receipt dist/ellis-wormhole.build.json \
+            --source experiments/ellis_wormhole.py
+      - name: Prove checkout-independent run and replay
+        shell: bash
+        run: |
+          set -euo pipefail
+          consumer="$(mktemp -d)"
+          cp dist/ellis-wormhole.pyz "$consumer/"
+          cp dist/ellis-wormhole.build.json "$consumer/"
+          cp experiments/fixtures/ellis_zero_mass_v1.json "$consumer/input.json"
+          (
+            cd "$consumer"
+            unset PYTHONPATH
+            python ellis-wormhole.pyz run --input input.json --output receipt.json
+            python ellis-wormhole.pyz verify --input input.json --receipt receipt.json > verification.json
+            python - <<'PY'
+import json
+from pathlib import Path
+verification = json.loads(Path("verification.json").read_text(encoding="utf-8"))
+assert verification["status"] == "PASS"
+assert verification["merge_or_canon_authority"] is False
+print("independent consumer replay: PASS")
+PY
+          )
+      - name: Retain portable review artifact
+        if: matrix.python == '3.13'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ellis-wormhole-portable-python-${{ matrix.python }}
+          path: |
+            dist/ellis-wormhole.pyz
+            dist/ellis-wormhole.build.json
+          if-no-files-found: error
