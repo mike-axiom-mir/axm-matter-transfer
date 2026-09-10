@@ -1,0 +1,165 @@
+name: Ellis portable capability discovery
+
+on:
+  pull_request:
+    paths:
+      - '.axm/discovery-public.json'
+      - 'registry/**'
+      - 'tools/generate_public_capabilities.py'
+      - 'tools/build_ellis_zipapp.py'
+      - 'experiments/ellis_wormhole.py'
+      - 'experiments/fixtures/ellis_zero_mass_v1.json'
+      - 'tests/test_public_capability_discovery.py'
+      - 'LICENSE'
+      - 'DISCOVERY.md'
+      - '.github/workflows/public-capability-discovery.yml'
+  push:
+    branches: [main]
+    paths:
+      - '.axm/discovery-public.json'
+      - 'registry/**'
+      - 'tools/generate_public_capabilities.py'
+      - 'tools/build_ellis_zipapp.py'
+      - 'experiments/ellis_wormhole.py'
+      - 'experiments/fixtures/ellis_zero_mass_v1.json'
+      - 'tests/test_public_capability_discovery.py'
+      - 'LICENSE'
+      - 'DISCOVERY.md'
+      - '.github/workflows/public-capability-discovery.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  provider:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.11', '3.13']
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Compile provider and discovery boundary
+        run: |
+          python -m py_compile \
+            experiments/ellis_wormhole.py \
+            tools/build_ellis_zipapp.py \
+            tools/generate_public_capabilities.py \
+            tests/test_ellis_wormhole.py \
+            tests/test_ellis_portable.py \
+            tests/test_public_capability_discovery.py
+      - name: Verify generated public capability evidence
+        run: python tools/generate_public_capabilities.py --check
+      - name: Run focused fail-closed discovery regressions
+        run: python -m unittest -v tests.test_public_capability_discovery
+      - name: Preserve complete repository suite
+        run: python -m unittest discover -s tests -v
+      - name: Build, verify, and independently replay portable provider
+        shell: bash
+        run: |
+          set -euo pipefail
+          provider="$(mktemp -d)"
+          consumer="$(mktemp -d)"
+          python tools/build_ellis_zipapp.py build \
+            --output "$provider/ellis-wormhole.pyz" \
+            --receipt "$provider/ellis-wormhole.build.json"
+          python tools/build_ellis_zipapp.py verify \
+            --artifact "$provider/ellis-wormhole.pyz" \
+            --receipt "$provider/ellis-wormhole.build.json" \
+            --source experiments/ellis_wormhole.py
+          cp "$provider/ellis-wormhole.pyz" "$consumer/"
+          cp experiments/fixtures/ellis_zero_mass_v1.json "$consumer/input.json"
+          (
+            cd "$consumer"
+            unset PYTHONPATH PYTHONHOME
+            PYTHONNOUSERSITE=1 python ellis-wormhole.pyz run --input input.json --output receipt.json
+            PYTHONNOUSERSITE=1 python ellis-wormhole.pyz verify --input input.json --receipt receipt.json > verification.json
+            python - <<'PY'
+          import json
+          from pathlib import Path
+          verification = json.loads(Path("verification.json").read_text(encoding="utf-8"))
+          assert verification["status"] == "PASS"
+          assert verification["claim_ceiling"] == "NO_PHYSICAL_MACROSCOPIC_MATTER_TRANSFER_MECHANISM_ESTABLISHED"
+          assert verification["merge_or_canon_authority"] is False
+          print("portable provider replay: PASS")
+          PY
+          )
+
+  portable-discovery-consumer:
+    needs: provider
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Matter Transfer lane
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Checkout pinned Discovery Buddy only to build portable artifact
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-discovery-buddy
+          ref: 565c38ecf93a9d563b02211258d8d36fcb1162b5
+          path: .discovery-buddy-source
+      - name: Build and independently verify Discovery Buddy zipapp
+        run: |
+          python .discovery-buddy-source/tools/build_portable_discovery.py build \
+            --output /tmp/discovery-buddy.pyz \
+            --receipt /tmp/discovery-buddy.pyz.receipt.json
+          python .discovery-buddy-source/tools/build_portable_discovery.py verify \
+            --output /tmp/discovery-buddy.pyz \
+            --receipt /tmp/discovery-buddy.pyz.receipt.json
+          rm -rf .discovery-buddy-source
+          test ! -e .discovery-buddy-source
+          PYTHONPATH= PYTHONNOUSERSITE=1 python /tmp/discovery-buddy.pyz --help
+      - name: Discover, verify, and query Ellis provider without Discovery Buddy source
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONPATH= PYTHONNOUSERSITE=1 python /tmp/discovery-buddy.pyz scan "$GITHUB_WORKSPACE" \
+            --public --output-dir /tmp/axm-discovery
+          PYTHONPATH= PYTHONNOUSERSITE=1 python /tmp/discovery-buddy.pyz verify "$GITHUB_WORKSPACE" \
+            --public --output-dir /tmp/axm-discovery
+          PYTHONPATH= PYTHONNOUSERSITE=1 python /tmp/discovery-buddy.pyz query \
+            /tmp/axm-discovery/public-discovery.json \
+            --capability-id axm.matter-transfer.ellis-wormhole.experiment/v1 \
+            --provider mike-axiom-mir/axm-matter-transfer > /tmp/ellis-query.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          query = json.loads(Path("/tmp/ellis-query.json").read_text(encoding="utf-8"))
+          assert query["schema"] == "axm.discovery-query/v0.1"
+          assert query["summary"] == {"matches": 1}
+          assert query["authority"] == {
+              "classification": "DISCOVERY_EVIDENCE_ONLY",
+              "execute": False,
+              "install": False,
+              "select": False,
+              "merge": False,
+              "canon": False,
+          }
+          candidate = query["candidates"][0]
+          assert candidate["repository"] == "mike-axiom-mir/axm-matter-transfer"
+          capability = candidate["capability"]
+          assert capability["id"] == "axm.matter-transfer.ellis-wormhole.experiment/v1"
+          assert capability["status"] is None
+          assert capability["providers"] == ["mike-axiom-mir/axm-matter-transfer"]
+          assert capability["truth"]["physicalMacroscopicMatterTransferEstablished"] is False
+          assert capability["truth"]["claimCeiling"] == "NO_PHYSICAL_MACROSCOPIC_MATTER_TRANSFER_MECHANISM_ESTABLISHED"
+          print(json.dumps({
+              "matches": 1,
+              "provider": candidate["repository"],
+              "capability": capability["id"],
+              "status": capability["status"],
+              "claim_ceiling": capability["truth"]["claimCeiling"],
+              "authority": query["authority"]["classification"],
+              "discovery_source_checkout_present": False,
+          }, sort_keys=True))
+          PY
