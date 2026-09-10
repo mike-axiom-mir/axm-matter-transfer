@@ -30,9 +30,11 @@ python3 experiments/ellis_wormhole.py verify \
   --receipt /tmp/ellis-receipt.json
 ```
 
-The output path is no-replace. Verification checks the receipt digest and then
-re-executes the experiment; changing a result and recalculating its digest is
-therefore insufficient.
+The output path is created exclusively in one filesystem operation: an existing
+file, directory, or symlink—including a dangling symlink—is treated as occupied
+and is never followed or replaced. Verification checks the receipt digest and
+then re-executes the experiment; changing a result and recalculating its digest
+is therefore insufficient.
 
 ### Portable single-file runner
 

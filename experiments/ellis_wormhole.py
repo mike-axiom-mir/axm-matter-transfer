@@ -13,6 +13,7 @@ import argparse
 import hashlib
 import json
 import math
+import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -327,10 +328,22 @@ def _write_json(path: Path | None, value: Any) -> None:
     if path is None:
         sys.stdout.buffer.write(data)
         return
-    if path.exists():
-        raise ContractError(f"refusing to overwrite existing output: {path}")
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_bytes(data)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+        if hasattr(os, "O_BINARY"):
+            flags |= os.O_BINARY
+        descriptor = os.open(path, flags, 0o644)
+    except FileExistsError as exc:
+        raise ContractError(f"refusing to overwrite existing output: {path}") from exc
+    except OSError as exc:
+        raise ContractError(f"cannot create output {path}: {exc}") from exc
+
+    try:
+        with os.fdopen(descriptor, "wb") as stream:
+            stream.write(data)
+    except OSError as exc:
+        raise ContractError(f"cannot write output {path}: {exc}") from exc
 
 
 def main(argv: list[str] | None = None) -> int:
