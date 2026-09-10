@@ -30,11 +30,14 @@ python3 experiments/ellis_wormhole.py verify \
   --receipt /tmp/ellis-receipt.json
 ```
 
-The output path is created exclusively in one filesystem operation: an existing
-file, directory, or symlink—including a dangling symlink—is treated as occupied
-and is never followed or replaced. Verification checks the receipt digest and
-then re-executes the experiment; changing a result and recalculating its digest
-is therefore insufficient.
+The complete receipt is written to a private same-directory stage and file
+`fsync`ed before a create-only hard link publishes the requested output name.
+The final path is therefore absent until complete bytes are ready; an existing
+file, directory, or symlink—including a dangling symlink—is occupied and is
+never followed or replaced. Ordinary success and failure paths remove their
+stage. Verification checks the receipt digest and then re-executes the
+experiment; changing a result and recalculating its digest is therefore
+insufficient.
 
 ### Portable single-file runner
 

@@ -14,6 +14,7 @@ import hashlib
 import json
 import math
 import os
+import secrets
 import sys
 from pathlib import Path
 from typing import Any
@@ -328,22 +329,48 @@ def _write_json(path: Path | None, value: Any) -> None:
     if path is None:
         sys.stdout.buffer.write(data)
         return
+
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
         if hasattr(os, "O_BINARY"):
             flags |= os.O_BINARY
-        descriptor = os.open(path, flags, 0o644)
-    except FileExistsError as exc:
-        raise ContractError(f"refusing to overwrite existing output: {path}") from exc
+        for _attempt in range(64):
+            stage = path.parent / f".{path.name}.{secrets.token_hex(16)}.tmp"
+            try:
+                descriptor = os.open(stage, flags, 0o644)
+                break
+            except FileExistsError:
+                continue
+        else:
+            raise ContractError(f"cannot allocate private output stage for {path}")
+    except ContractError:
+        raise
     except OSError as exc:
-        raise ContractError(f"cannot create output {path}: {exc}") from exc
+        raise ContractError(f"cannot create output stage for {path}: {exc}") from exc
 
     try:
         with os.fdopen(descriptor, "wb") as stream:
             stream.write(data)
+            stream.flush()
+            os.fsync(stream.fileno())
+        try:
+            os.link(stage, path)
+        except FileExistsError as exc:
+            raise ContractError(f"refusing to overwrite existing output: {path}") from exc
+        except OSError as exc:
+            raise ContractError(f"cannot publish output {path}: {exc}") from exc
     except OSError as exc:
         raise ContractError(f"cannot write output {path}: {exc}") from exc
+    finally:
+        try:
+            stage.unlink()
+        except FileNotFoundError:
+            pass
+        except OSError:
+            # A hidden staging file has no receipt authority. Cleanup remains
+            # best effort after the final create-only publication decision.
+            pass
 
 
 def main(argv: list[str] | None = None) -> int:

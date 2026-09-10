@@ -16,7 +16,7 @@
     },
     {
       "path": "experiments/ellis_wormhole.py",
-      "git_blob_sha1": "75756d220c43a5660ca1dfd207149bfa355aa089"
+      "git_blob_sha1": "c3ae5510cce9702d7c6226e2798c1fe8d0e2732b"
     },
     {
       "path": "experiments/fixtures/ellis_zero_mass_v1.json",
@@ -58,5 +58,5 @@
     "merge_authority": false,
     "canon_authority": false
   },
-  "receipt_sha256": "ad4a1fb49507d85b8f5e4729c05b781927b3a1290f0b50ae3cfd871ed733dd79"
+  "receipt_sha256": "9a21c9b022f5f32f04a3b1b6a9f53a73406f2d1455910eb2262dbe8431027810"
 }

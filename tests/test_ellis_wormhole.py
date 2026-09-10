@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import copy
+import concurrent.futures
 import json
 import os
 import subprocess
 import sys
 import tempfile
+import threading
 import unittest
 from unittest import mock
 from pathlib import Path
@@ -161,6 +163,7 @@ class EllisWormholeExperimentTests(unittest.TestCase):
                 text=True,
             )
             self.assertEqual(run.returncode, 0, run.stderr)
+            self.assertEqual(list(receipt_path.parent.glob(f".{receipt_path.name}.*.tmp")), [])
             verify = subprocess.run(
                 [sys.executable, str(EXPERIMENT), "verify", "--input", str(FIXTURE), "--receipt", str(receipt_path)],
                 cwd=ROOT,
@@ -220,7 +223,6 @@ class EllisWormholeExperimentTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as temporary:
             output = Path(temporary) / "receipt.json"
-            original_fdopen = os.fdopen
 
             def interrupt(descriptor: int, *_args: object, **_kwargs: object) -> InterruptedStream:
                 return InterruptedStream(descriptor)
@@ -231,7 +233,29 @@ class EllisWormholeExperimentTests(unittest.TestCase):
 
             self.assertFalse(output.exists())
             self.assertEqual(list(output.parent.glob(f".{output.name}.*.tmp")), [])
-            self.assertIsNotNone(original_fdopen)
+
+    def test_concurrent_receipt_publishers_expose_one_complete_winner(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary) / "receipt.json"
+            receipts = [run_experiment(self.fixture), run_experiment(self.fixture)]
+            receipts[1]["status"] = "HOLD"
+            barrier = threading.Barrier(2)
+
+            def publish(receipt: dict[str, object]) -> str:
+                barrier.wait()
+                try:
+                    ellis_wormhole._write_json(output, receipt)
+                except ContractError as exc:
+                    self.assertIn("refusing to overwrite", str(exc))
+                    return "HELD"
+                return "PUBLISHED"
+
+            with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+                outcomes = list(executor.map(publish, receipts))
+
+            self.assertEqual(sorted(outcomes), ["HELD", "PUBLISHED"])
+            self.assertIn(output.read_bytes(), [ellis_wormhole.canonical_bytes(value) for value in receipts])
+            self.assertEqual(list(output.parent.glob(f".{output.name}.*.tmp")), [])
 
 
 if __name__ == "__main__":
