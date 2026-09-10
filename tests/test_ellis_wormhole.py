@@ -177,6 +177,29 @@ class EllisWormholeExperimentTests(unittest.TestCase):
             self.assertEqual(refused.returncode, 2)
             self.assertIn("refusing to overwrite", refused.stderr)
 
+    def test_cli_run_refuses_dangling_symlink_output(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            redirected = root / "redirected-receipt.json"
+            output = root / "requested-receipt.json"
+            try:
+                output.symlink_to(redirected)
+            except (OSError, NotImplementedError) as exc:
+                self.skipTest(f"symlinks unavailable: {exc}")
+
+            run = subprocess.run(
+                [sys.executable, str(EXPERIMENT), "run", "--input", str(FIXTURE), "--output", str(output)],
+                cwd=ROOT,
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+
+            self.assertEqual(run.returncode, 2)
+            self.assertIn("refusing to overwrite", run.stderr)
+            self.assertTrue(output.is_symlink())
+            self.assertFalse(redirected.exists())
+
 
 if __name__ == "__main__":
     unittest.main()
