@@ -64,6 +64,10 @@ provider source. Re-sealing an artifact with an extra member therefore does not
 make the widened artifact admissible. SHA-256 here is integrity/lineage
 evidence, not authorship authentication or a signature.
 
+The pull-request gate also retains the built `.pyz` and build receipt as a
+review artifact. Retention is a review/distribution convenience, not a release,
+promotion, or claim that the artifact is CANON.
+
 This distribution seam applies the same AXM principle used by verified portable
 capsules—carry exact source/evidence with the thing that leaves its checkout—but
 it does not copy implementation code from another repository or create a
