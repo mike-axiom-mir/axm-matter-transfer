@@ -1,0 +1,62 @@
+{
+  "schema": "axm.public-capability-registry-receipt/v1",
+  "repository": "mike-axiom-mir/axm-matter-transfer",
+  "registry": {
+    "path": "registry/capabilities.jsonl",
+    "sha256": "955e6b50551e00d832a186a49833ee83a72ae63ea8c65d75e69c0185b9a22919",
+    "capability_count": 1,
+    "capability_ids": [
+      "axm.matter-transfer.ellis-wormhole.experiment/v1"
+    ]
+  },
+  "sources": [
+    {
+      "path": "tools/build_ellis_zipapp.py",
+      "git_blob_sha1": "b55d4b14a7d981d79fc83269d6482d0555927fac"
+    },
+    {
+      "path": "experiments/ellis_wormhole.py",
+      "git_blob_sha1": "2b656011f7a4b7866c35e2f2c51f68b08d750ca9"
+    },
+    {
+      "path": "experiments/fixtures/ellis_zero_mass_v1.json",
+      "git_blob_sha1": "25dfbd33e46deb4ca1a4cff3a5cf33d15ca7dc25"
+    },
+    {
+      "path": "LICENSE",
+      "git_blob_sha1": "261eeb9e9f8b2b4b0d119366dda99c6fd7d35c64"
+    }
+  ],
+  "compatibility": {
+    "consumer": "mike-axiom-mir/axm-discovery-buddy",
+    "pinned_ref": "565c38ecf93a9d563b02211258d8d36fcb1162b5",
+    "portable_boundary": "discovery-buddy.pyz",
+    "marker_contract": "axm.discovery-public/v1",
+    "registry_contract": "registry/*capabilit*.jsonl"
+  },
+  "pattern_provenance": {
+    "adapted_from_repository": "mike-axiom-mir/axm-casual-loop",
+    "adapted_from_ref": "f561a8a325444be30ad0b4fee412b3958aa1f1ee",
+    "adapted_paths": [
+      ".axm/discovery-public.json",
+      "tools/generate_public_capabilities.py",
+      ".github/workflows/public-capability-discovery.yml"
+    ],
+    "copied_runtime_code": false
+  },
+  "truth_boundary": {
+    "source_backed": true,
+    "public_export_intent": true,
+    "runtime_distribution_proven": true,
+    "scientific_validation_beyond_declared_model": false,
+    "physical_macroscopic_matter_transfer_established": false,
+    "execution_authority": false,
+    "automatic_selection_authority": false,
+    "automatic_install_authority": false,
+    "scientific_promotion_authority": false,
+    "engineering_authority": false,
+    "merge_authority": false,
+    "canon_authority": false
+  },
+  "receipt_sha256": "55a54d9cbdb2fbc3c574e5103842d7b856c855417687a3c8ac333594c6267767"
+}
