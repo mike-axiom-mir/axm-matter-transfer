@@ -69,13 +69,13 @@ jobs:
             python ellis-wormhole.pyz run --input input.json --output receipt.json
             python ellis-wormhole.pyz verify --input input.json --receipt receipt.json > verification.json
             python - <<'PY'
-import json
-from pathlib import Path
-verification = json.loads(Path("verification.json").read_text(encoding="utf-8"))
-assert verification["status"] == "PASS"
-assert verification["merge_or_canon_authority"] is False
-print("independent consumer replay: PASS")
-PY
+          import json
+          from pathlib import Path
+          verification = json.loads(Path("verification.json").read_text(encoding="utf-8"))
+          assert verification["status"] == "PASS"
+          assert verification["merge_or_canon_authority"] is False
+          print("independent consumer replay: PASS")
+          PY
           )
       - name: Retain portable review artifact
         if: matrix.python-version == '3.13'
