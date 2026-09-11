@@ -61,16 +61,61 @@ def _strict_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     return result
 
 
+def _stat_signature(info: os.stat_result) -> tuple[int, int, int, int, int]:
+    return (
+        info.st_dev,
+        info.st_ino,
+        info.st_size,
+        info.st_mtime_ns,
+        info.st_ctime_ns,
+    )
+
+
 def _read_regular(path: Path, *, limit: int | None = None) -> bytes:
-    if path.is_symlink():
-        raise PortableError(f"refusing symlink input: {path}")
-    if not path.is_file():
-        raise PortableError(f"required regular file missing: {path}")
     try:
-        with path.open("rb") as stream:
+        admitted = path.lstat()
+    except FileNotFoundError as exc:
+        raise PortableError(f"required regular file missing: {path}") from exc
+    except OSError as exc:
+        raise PortableError(f"cannot inspect input {path}: {exc}") from exc
+
+    if stat.S_ISLNK(admitted.st_mode):
+        raise PortableError(f"refusing symlink input: {path}")
+    if not stat.S_ISREG(admitted.st_mode):
+        raise PortableError(f"required regular file missing: {path}")
+    if limit is not None and admitted.st_size > limit:
+        raise PortableError(f"{path} exceeds {limit}-byte limit")
+
+    flags = os.O_RDONLY
+    if hasattr(os, "O_BINARY"):
+        flags |= os.O_BINARY
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+
+    try:
+        descriptor = os.open(path, flags)
+    except OSError as exc:
+        raise PortableError(f"cannot open admitted input {path}: {exc}") from exc
+
+    try:
+        with os.fdopen(descriptor, "rb") as stream:
+            opened = os.fstat(stream.fileno())
+            if not stat.S_ISREG(opened.st_mode):
+                raise PortableError(f"opened input is not a regular file: {path}")
+            if _stat_signature(opened) != _stat_signature(admitted):
+                raise PortableError(f"input changed before open: {path}")
+            if limit is not None and opened.st_size > limit:
+                raise PortableError(f"{path} exceeds {limit}-byte limit")
+
             data = stream.read() if limit is None else stream.read(limit + 1)
+            after = os.fstat(stream.fileno())
+    except PortableError:
+        raise
     except OSError as exc:
         raise PortableError(f"cannot read {path}: {exc}") from exc
+
+    if _stat_signature(after) != _stat_signature(opened) or len(data) != after.st_size:
+        raise PortableError(f"input changed during read: {path}")
     if limit is not None and len(data) > limit:
         raise PortableError(f"{path} exceeds {limit}-byte limit")
     return data
