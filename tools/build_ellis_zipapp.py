@@ -13,6 +13,8 @@ import argparse
 import hashlib
 import io
 import json
+import os
+import secrets
 import stat
 import sys
 import zipfile
@@ -154,21 +156,111 @@ def _receipt(artifact: bytes, source: bytes) -> dict[str, Any]:
     }
 
 
+def _occupied(path: Path) -> bool:
+    try:
+        path.lstat()
+    except FileNotFoundError:
+        return False
+    except OSError as exc:
+        raise PortableError(f"cannot inspect output path {path}: {exc}") from exc
+    return True
+
+
+def _stage_bytes(path: Path, data: bytes, label: str) -> Path:
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+        if hasattr(os, "O_BINARY"):
+            flags |= os.O_BINARY
+        for _attempt in range(64):
+            stage = path.parent / f".{path.name}.{secrets.token_hex(16)}.tmp"
+            try:
+                descriptor = os.open(stage, flags, 0o644)
+                break
+            except FileExistsError:
+                continue
+        else:
+            raise PortableError(f"cannot allocate private {label} stage for {path}")
+    except PortableError:
+        raise
+    except OSError as exc:
+        raise PortableError(f"cannot create {label} stage for {path}: {exc}") from exc
+
+    try:
+        with os.fdopen(descriptor, "wb") as stream:
+            stream.write(data)
+            stream.flush()
+            os.fsync(stream.fileno())
+    except OSError as exc:
+        try:
+            stage.unlink()
+        except OSError:
+            pass
+        raise PortableError(f"cannot write {label} stage for {path}: {exc}") from exc
+    return stage
+
+
+def _cleanup_stage(stage: Path | None) -> None:
+    if stage is None:
+        return
+    try:
+        stage.unlink()
+    except FileNotFoundError:
+        pass
+    except OSError:
+        # Private stages have no bundle authority. Cleanup is best effort after
+        # the create-only publication decision.
+        pass
+
+
+def _publish_stage(stage: Path, path: Path, label: str) -> bool:
+    try:
+        os.link(stage, path)
+    except FileExistsError:
+        return False
+    except OSError as exc:
+        raise PortableError(f"cannot publish {label} {path}: {exc}") from exc
+    return True
+
+
 def build(root: Path, artifact_path: Path, receipt_path: Path) -> dict[str, Any]:
     source_path = root / SOURCE_RELATIVE
     source = _read_regular(source_path)
     artifact = build_bytes(source)
     receipt = _receipt(artifact, source)
+    receipt_bytes = canonical_bytes(receipt)
 
-    if artifact_path.exists() or artifact_path.is_symlink():
-        raise PortableError(f"refusing to overwrite artifact: {artifact_path}")
-    if receipt_path.exists() or receipt_path.is_symlink():
+    if artifact_path.absolute() == receipt_path.absolute():
+        raise PortableError("artifact and receipt paths must be distinct")
+    if _occupied(receipt_path):
         raise PortableError(f"refusing to overwrite receipt: {receipt_path}")
-    artifact_path.parent.mkdir(parents=True, exist_ok=True)
-    receipt_path.parent.mkdir(parents=True, exist_ok=True)
-    artifact_path.write_bytes(artifact)
-    receipt_path.write_bytes(canonical_bytes(receipt))
-    return receipt
+
+    artifact_ready = _occupied(artifact_path)
+    if artifact_ready:
+        if _read_regular(artifact_path) != artifact:
+            raise PortableError(f"refusing to replace conflicting artifact: {artifact_path}")
+
+    artifact_stage: Path | None = None
+    receipt_stage: Path | None = None
+    try:
+        if not artifact_ready:
+            artifact_stage = _stage_bytes(artifact_path, artifact, "artifact")
+        receipt_stage = _stage_bytes(receipt_path, receipt_bytes, "receipt")
+
+        if artifact_stage is not None and not _publish_stage(artifact_stage, artifact_path, "artifact"):
+            if _read_regular(artifact_path) != artifact:
+                raise PortableError(f"refusing to replace conflicting artifact: {artifact_path}")
+
+        # The artifact is derived, restart-recoverable state. Recheck its exact
+        # identity before the receipt becomes the bundle's commit marker.
+        if _read_regular(artifact_path) != artifact:
+            raise PortableError(f"artifact changed before receipt commit: {artifact_path}")
+        if not _publish_stage(receipt_stage, receipt_path, "receipt"):
+            raise PortableError(f"refusing to overwrite receipt: {receipt_path}")
+        return receipt
+    finally:
+        _cleanup_stage(artifact_stage)
+        _cleanup_stage(receipt_stage)
 
 
 def _validate_receipt(receipt: dict[str, Any]) -> None:

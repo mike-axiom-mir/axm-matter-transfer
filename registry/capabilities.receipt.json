@@ -12,7 +12,7 @@
   "sources": [
     {
       "path": "tools/build_ellis_zipapp.py",
-      "git_blob_sha1": "b55d4b14a7d981d79fc83269d6482d0555927fac"
+      "git_blob_sha1": "410bb48a2110045165d4ff164899fc4be50a8d82"
     },
     {
       "path": "experiments/ellis_wormhole.py",
@@ -58,5 +58,5 @@
     "merge_authority": false,
     "canon_authority": false
   },
-  "receipt_sha256": "9a21c9b022f5f32f04a3b1b6a9f53a73406f2d1455910eb2262dbe8431027810"
+  "receipt_sha256": "743fbb80f28ab1a4f21698f6d71825712249e59bf9709aa0b04c95d9cedcdc18"
 }

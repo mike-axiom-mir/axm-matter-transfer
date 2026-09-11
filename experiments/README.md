@@ -69,6 +69,15 @@ provider source. Re-sealing an artifact with an extra member therefore does not
 make the widened artifact admissible. SHA-256 here is integrity/lineage
 evidence, not authorship authentication or a signature.
 
+The builder publishes the zipapp and build receipt as a recoverable local
+bundle. Both files are staged and file-`fsync`ed before create-only publication;
+the artifact is derived ready-state and the receipt is the commit marker. If a
+process stops after publishing the artifact, a later build from the exact same
+source can verify and reuse those bytes before committing the receipt. A
+different artifact, any occupied receipt path, or a concurrent receipt winner
+is held without replacement. Consumers admit the pair only through `verify`;
+an artifact without its receipt is not a committed bundle.
+
 The pull-request gate also retains the built `.pyz` and build receipt as a
 review artifact. Retention is a review/distribution convenience, not a release,
 promotion, or claim that the artifact is CANON.
