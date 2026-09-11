@@ -7,6 +7,7 @@ on:
       - "tools/build_ellis_zipapp.py"
       - "tests/test_ellis_wormhole.py"
       - "tests/test_ellis_portable.py"
+      - "tests/test_ellis_portable_read_identity.py"
       - ".github/workflows/ellis-wormhole.yml"
       - "README.md"
   workflow_dispatch:
@@ -32,7 +33,8 @@ jobs:
             experiments/ellis_wormhole.py \
             tools/build_ellis_zipapp.py \
             tests/test_ellis_wormhole.py \
-            tests/test_ellis_portable.py
+            tests/test_ellis_portable.py \
+            tests/test_ellis_portable_read_identity.py
       - name: Run adversarial reproduction and portability tests
         run: python -m unittest discover -s tests -v
       - name: Build and independently replay the declared receipt
