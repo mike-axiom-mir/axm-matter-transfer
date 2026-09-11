@@ -1,20 +1,26 @@
 from __future__ import annotations
 
+import concurrent.futures
 import json
 import os
 import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 import unittest
 import zipfile
 from pathlib import Path
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[1]
 BUILDER = ROOT / "tools" / "build_ellis_zipapp.py"
 SOURCE = ROOT / "experiments" / "ellis_wormhole.py"
 FIXTURE = ROOT / "experiments" / "fixtures" / "ellis_zero_mass_v1.json"
+
+sys.path.insert(0, str(ROOT / "tools"))
+import build_ellis_zipapp as builder  # noqa: E402
 
 
 def run(*args: str | Path, cwd: Path | None = None, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[bytes]:
@@ -206,6 +212,63 @@ class EllisPortableTests(unittest.TestCase):
             )
             self.assertEqual(result.returncode, 2)
             self.assertIn(b"differs from provider source", result.stderr)
+
+    def test_interrupted_bundle_publish_resumes_from_exact_artifact(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifact = root / "ellis.pyz"
+            receipt = root / "ellis.receipt.json"
+            real_link = os.link
+            link_count = 0
+
+            def interrupt_before_receipt(source: Path, destination: Path) -> None:
+                nonlocal link_count
+                link_count += 1
+                if link_count == 2:
+                    raise OSError("injected interruption before receipt commit")
+                real_link(source, destination)
+
+            with mock.patch.object(os, "link", side_effect=interrupt_before_receipt):
+                with self.assertRaisesRegex(builder.PortableError, "cannot publish receipt"):
+                    builder.build(ROOT, artifact, receipt)
+
+            self.assertTrue(artifact.is_file())
+            self.assertFalse(receipt.exists())
+            self.assertEqual(list(root.glob(".*.tmp")), [])
+
+            recovered = builder.build(ROOT, artifact, receipt)
+            verified = builder.verify(artifact, receipt, SOURCE)
+            self.assertEqual(verified["status"], "PASS")
+            self.assertEqual(verified["artifact_sha256"], recovered["artifact"]["sha256"])
+            self.assertEqual(list(root.glob(".*.tmp")), [])
+
+    def test_concurrent_bundle_builders_report_one_commit_winner(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifact = root / "ellis.pyz"
+            receipt = root / "ellis.receipt.json"
+            barrier = threading.Barrier(2)
+            real_write_bytes = Path.write_bytes
+
+            def coordinate_old_artifact_writes(path: Path, data: bytes) -> int:
+                if path == artifact:
+                    barrier.wait()
+                return real_write_bytes(path, data)
+
+            def build_once() -> str:
+                try:
+                    builder.build(ROOT, artifact, receipt)
+                except builder.PortableError:
+                    return "HELD"
+                return "COMMITTED"
+
+            with mock.patch.object(Path, "write_bytes", coordinate_old_artifact_writes):
+                with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+                    outcomes = list(executor.map(lambda _index: build_once(), range(2)))
+
+            self.assertEqual(sorted(outcomes), ["COMMITTED", "HELD"])
+            self.assertEqual(builder.verify(artifact, receipt, SOURCE)["status"], "PASS")
+            self.assertEqual(list(root.glob(".*.tmp")), [])
 
 
 if __name__ == "__main__":
