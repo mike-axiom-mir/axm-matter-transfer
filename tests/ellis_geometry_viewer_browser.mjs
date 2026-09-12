@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
+import net from 'node:net';
 import path from 'node:path';
 import process from 'node:process';
 
@@ -9,15 +10,52 @@ fs.mkdirSync(evidenceDir, { recursive: true });
 const html = fs.readFileSync(htmlPath, 'utf8');
 
 function sleep(ms){ return new Promise(r => setTimeout(r, ms)); }
+function reservePort(){
+  return new Promise((resolve,reject)=>{
+    const server=net.createServer();
+    server.once('error',reject);
+    server.listen(0,'127.0.0.1',()=>{
+      const address=server.address();
+      const port=typeof address==='object'&&address ? address.port : 0;
+      server.close(error=>error?reject(error):resolve(port));
+    });
+  });
+}
+
 const chrome=process.env.CHROME_BIN || (process.platform==='linux' ? 'chromium' : 'google-chrome');
 const userData=fs.mkdtempSync('/tmp/axm-ellis-viewer-');
-const proc=spawn(chrome,['--headless=new','--no-sandbox','--disable-gpu','--hide-scrollbars',`--user-data-dir=${userData}`,'--remote-debugging-port=0','about:blank'],{stdio:['ignore','pipe','pipe']});
+const debugPort=await reservePort();
+const proc=spawn(chrome,[
+  '--headless=new',
+  '--no-sandbox',
+  '--disable-gpu',
+  '--disable-dev-shm-usage',
+  '--disable-background-networking',
+  '--no-first-run',
+  '--no-default-browser-check',
+  '--hide-scrollbars',
+  `--user-data-dir=${userData}`,
+  '--remote-debugging-address=127.0.0.1',
+  `--remote-debugging-port=${debugPort}`,
+  'about:blank'
+],{stdio:['ignore','pipe','pipe']});
 let stderr='';proc.stderr.on('data',d=>stderr+=d.toString());
 let wsUrl='';
-for(let i=0;i<80&&!wsUrl;i++){
-  const match=stderr.match(/DevTools listening on (ws:\/\/[^\s]+)/); if(match) wsUrl=match[1]; else await sleep(50);
+for(let i=0;i<100&&!wsUrl;i++){
+  if(proc.exitCode!==null) break;
+  try{
+    const response=await fetch(`http://127.0.0.1:${debugPort}/json/version`,{signal:AbortSignal.timeout(300)});
+    if(response.ok){
+      const version=await response.json();
+      if(typeof version.webSocketDebuggerUrl==='string') wsUrl=version.webSocketDebuggerUrl;
+    }
+  }catch{}
+  if(!wsUrl) await sleep(50);
 }
-if(!wsUrl) throw new Error(`Chromium DevTools endpoint unavailable: ${stderr.slice(-1000)}`);
+if(!wsUrl){
+  try{proc.kill('SIGTERM')}catch{}
+  throw new Error(`Chromium DevTools endpoint unavailable on 127.0.0.1:${debugPort}; exit=${proc.exitCode}: ${stderr.slice(-1000)}`);
+}
 const browserWs=new WebSocket(wsUrl);
 await new Promise((resolve,reject)=>{browserWs.addEventListener('open',resolve,{once:true});browserWs.addEventListener('error',reject,{once:true})});
 let id=0;const pending=new Map();const pendingS=new Map();let sessionId='';
@@ -49,4 +87,5 @@ const mobile=await evalv(`({overflow:document.documentElement.scrollWidth>docume
 if(mobile.overflow) throw new Error('mobile horizontal overflow');
 const shotM=await sendS('Page.captureScreenshot',{format:'png',captureBeyondViewport:false});fs.writeFileSync(path.join(evidenceDir,'ellis-geometry-mobile.png'),Buffer.from(shotM.data,'base64'));
 console.log(JSON.stringify({status:'PASS',start,after,mobile,evidenceDir},null,2));
-try{browserWs.close()}catch{};proc.kill('SIGTERM');
+try{browserWs.close()}catch{};
+try{proc.kill('SIGTERM')}catch{}
