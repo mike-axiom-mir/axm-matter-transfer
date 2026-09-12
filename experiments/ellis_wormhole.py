@@ -13,6 +13,8 @@ import argparse
 import hashlib
 import json
 import math
+import os
+import secrets
 import sys
 from pathlib import Path
 from typing import Any
@@ -22,6 +24,7 @@ INPUT_SCHEMA = "axm.matter-transfer.ellis-wormhole.input/v1"
 RECEIPT_SCHEMA = "axm.matter-transfer.ellis-wormhole.receipt/v1"
 MODEL_ID = "ellis-zero-mass-wormhole"
 CLAIM_CEILING = "NO_PHYSICAL_MACROSCOPIC_MATTER_TRANSFER_MECHANISM_ESTABLISHED"
+MAX_JSON_BYTES = 1_048_576
 MAX_SAMPLES = 257
 INPUT_KEYS = {
     "schema",
@@ -58,7 +61,10 @@ def sha256(value: bytes) -> str:
 def _number(value: Any, name: str, *, positive: bool = False) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise ContractError(f"{name} must be a finite number")
-    result = float(value)
+    try:
+        result = float(value)
+    except (OverflowError, ValueError) as exc:
+        raise ContractError(f"{name} must be a finite number") from exc
     if not math.isfinite(result):
         raise ContractError(f"{name} must be a finite number")
     if positive and result <= 0:
@@ -284,10 +290,37 @@ def verify_receipt(raw_input: Any, receipt: Any) -> dict[str, Any]:
     }
 
 
+def _strict_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ContractError(f"duplicate JSON object key: {key}")
+        result[key] = value
+    return result
+
+
+def _reject_nonstandard_constant(token: str) -> Any:
+    raise ContractError(f"non-standard JSON constant: {token}")
+
+
 def _read_json(path: Path) -> Any:
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        with path.open("rb") as stream:
+            data = stream.read(MAX_JSON_BYTES + 1)
+    except OSError as exc:
+        raise ContractError(f"cannot read JSON from {path}: {exc}") from exc
+    if len(data) > MAX_JSON_BYTES:
+        raise ContractError(f"JSON input {path} exceeds {MAX_JSON_BYTES}-byte limit")
+    try:
+        text = data.decode("utf-8")
+        return json.loads(
+            text,
+            object_pairs_hook=_strict_object,
+            parse_constant=_reject_nonstandard_constant,
+        )
+    except ContractError:
+        raise
+    except (UnicodeError, json.JSONDecodeError, ValueError, RecursionError) as exc:
         raise ContractError(f"cannot read valid JSON from {path}: {exc}") from exc
 
 
@@ -296,10 +329,48 @@ def _write_json(path: Path | None, value: Any) -> None:
     if path is None:
         sys.stdout.buffer.write(data)
         return
-    if path.exists():
-        raise ContractError(f"refusing to overwrite existing output: {path}")
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_bytes(data)
+
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+        if hasattr(os, "O_BINARY"):
+            flags |= os.O_BINARY
+        for _attempt in range(64):
+            stage = path.parent / f".{path.name}.{secrets.token_hex(16)}.tmp"
+            try:
+                descriptor = os.open(stage, flags, 0o644)
+                break
+            except FileExistsError:
+                continue
+        else:
+            raise ContractError(f"cannot allocate private output stage for {path}")
+    except ContractError:
+        raise
+    except OSError as exc:
+        raise ContractError(f"cannot create output stage for {path}: {exc}") from exc
+
+    try:
+        with os.fdopen(descriptor, "wb") as stream:
+            stream.write(data)
+            stream.flush()
+            os.fsync(stream.fileno())
+        try:
+            os.link(stage, path)
+        except FileExistsError as exc:
+            raise ContractError(f"refusing to overwrite existing output: {path}") from exc
+        except OSError as exc:
+            raise ContractError(f"cannot publish output {path}: {exc}") from exc
+    except OSError as exc:
+        raise ContractError(f"cannot write output {path}: {exc}") from exc
+    finally:
+        try:
+            stage.unlink()
+        except FileNotFoundError:
+            pass
+        except OSError:
+            # A hidden staging file has no receipt authority. Cleanup remains
+            # best effort after the final create-only publication decision.
+            pass
 
 
 def main(argv: list[str] | None = None) -> int:
