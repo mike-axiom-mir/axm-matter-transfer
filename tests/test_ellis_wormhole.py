@@ -1,11 +1,15 @@
 from __future__ import annotations
 
 import copy
+import concurrent.futures
 import json
+import os
 import subprocess
 import sys
 import tempfile
+import threading
 import unittest
+from unittest import mock
 from pathlib import Path
 
 
@@ -14,6 +18,7 @@ EXPERIMENT = ROOT / "experiments" / "ellis_wormhole.py"
 FIXTURE = ROOT / "experiments" / "fixtures" / "ellis_zero_mass_v1.json"
 sys.path.insert(0, str(EXPERIMENT.parent))
 
+import ellis_wormhole  # noqa: E402
 from ellis_wormhole import ContractError, run_experiment, verify_receipt  # noqa: E402
 
 
@@ -56,6 +61,81 @@ class EllisWormholeExperimentTests(unittest.TestCase):
         with self.assertRaisesRegex(ContractError, "between 32 and 1000000"):
             run_experiment(changed)
 
+    def test_cli_rejects_duplicate_input_keys_before_model_admission(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            duplicate_input = Path(temporary) / "duplicate-input.json"
+            receipt_path = Path(temporary) / "receipt.json"
+            fixture_text = FIXTURE.read_text(encoding="utf-8")
+            duplicate_input.write_text(
+                fixture_text.replace(
+                    '  "model": "ellis-zero-mass-wormhole",',
+                    '  "model": "engineering-portal",\n  "model": "ellis-zero-mass-wormhole",',
+                    1,
+                ),
+                encoding="utf-8",
+            )
+            run = subprocess.run(
+                [sys.executable, str(EXPERIMENT), "run", "--input", str(duplicate_input), "--output", str(receipt_path)],
+                cwd=ROOT,
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(run.returncode, 2, run.stderr)
+            self.assertIn("duplicate JSON object key: model", run.stderr)
+            self.assertFalse(receipt_path.exists())
+
+    def test_cli_rejects_oversized_json_before_semantic_validation(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            oversized_input = Path(temporary) / "oversized-input.json"
+            receipt_path = Path(temporary) / "receipt.json"
+            oversized_input.write_text(
+                (" " * (1024 * 1024 + 1)) + FIXTURE.read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+            run = subprocess.run(
+                [sys.executable, str(EXPERIMENT), "run", "--input", str(oversized_input), "--output", str(receipt_path)],
+                cwd=ROOT,
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(run.returncode, 2, run.stderr)
+            self.assertIn("exceeds 1048576-byte limit", run.stderr)
+            self.assertFalse(receipt_path.exists())
+
+    def test_cli_verify_rejects_duplicate_keys_in_receipt_bytes(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            receipt_path = Path(temporary) / "receipt.json"
+            ambiguous_receipt = Path(temporary) / "ambiguous-receipt.json"
+            run = subprocess.run(
+                [sys.executable, str(EXPERIMENT), "run", "--input", str(FIXTURE), "--output", str(receipt_path)],
+                cwd=ROOT,
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(run.returncode, 0, run.stderr)
+            receipt_text = receipt_path.read_text(encoding="utf-8")
+            marker = '"status":"PASS"'
+            marker_index = receipt_text.rfind(marker)
+            self.assertGreaterEqual(marker_index, 0)
+            ambiguous_receipt.write_text(
+                receipt_text[:marker_index]
+                + '"status":"HOLD","status":"PASS"'
+                + receipt_text[marker_index + len(marker):],
+                encoding="utf-8",
+            )
+            verify = subprocess.run(
+                [sys.executable, str(EXPERIMENT), "verify", "--input", str(FIXTURE), "--receipt", str(ambiguous_receipt)],
+                cwd=ROOT,
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(verify.returncode, 2, verify.stderr)
+            self.assertIn("duplicate JSON object key: status", verify.stderr)
+
     def test_receipt_tampering_and_resealed_false_result_fail_reexecution(self) -> None:
         receipt = run_experiment(self.fixture)
         tampered = copy.deepcopy(receipt)
@@ -83,6 +163,7 @@ class EllisWormholeExperimentTests(unittest.TestCase):
                 text=True,
             )
             self.assertEqual(run.returncode, 0, run.stderr)
+            self.assertEqual(list(receipt_path.parent.glob(f".{receipt_path.name}.*.tmp")), [])
             verify = subprocess.run(
                 [sys.executable, str(EXPERIMENT), "verify", "--input", str(FIXTURE), "--receipt", str(receipt_path)],
                 cwd=ROOT,
@@ -101,6 +182,80 @@ class EllisWormholeExperimentTests(unittest.TestCase):
             )
             self.assertEqual(refused.returncode, 2)
             self.assertIn("refusing to overwrite", refused.stderr)
+
+    def test_cli_run_refuses_dangling_symlink_output(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            redirected = root / "redirected-receipt.json"
+            output = root / "requested-receipt.json"
+            try:
+                output.symlink_to(redirected)
+            except (OSError, NotImplementedError) as exc:
+                self.skipTest(f"symlinks unavailable: {exc}")
+
+            run = subprocess.run(
+                [sys.executable, str(EXPERIMENT), "run", "--input", str(FIXTURE), "--output", str(output)],
+                cwd=ROOT,
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+
+            self.assertEqual(run.returncode, 2)
+            self.assertIn("refusing to overwrite", run.stderr)
+            self.assertTrue(output.is_symlink())
+            self.assertFalse(redirected.exists())
+
+    def test_interrupted_receipt_write_never_exposes_partial_final_path(self) -> None:
+        class InterruptedStream:
+            def __init__(self, descriptor: int):
+                self.descriptor = descriptor
+
+            def __enter__(self) -> "InterruptedStream":
+                return self
+
+            def write(self, data: bytes) -> None:
+                os.write(self.descriptor, data[:17])
+                raise OSError("injected interrupted receipt write")
+
+            def __exit__(self, *_args: object) -> None:
+                os.close(self.descriptor)
+
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary) / "receipt.json"
+
+            def interrupt(descriptor: int, *_args: object, **_kwargs: object) -> InterruptedStream:
+                return InterruptedStream(descriptor)
+
+            with mock.patch.object(ellis_wormhole.os, "fdopen", side_effect=interrupt):
+                with self.assertRaisesRegex(ContractError, "cannot write output"):
+                    ellis_wormhole._write_json(output, run_experiment(self.fixture))
+
+            self.assertFalse(output.exists())
+            self.assertEqual(list(output.parent.glob(f".{output.name}.*.tmp")), [])
+
+    def test_concurrent_receipt_publishers_expose_one_complete_winner(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary) / "receipt.json"
+            receipts = [run_experiment(self.fixture), run_experiment(self.fixture)]
+            receipts[1]["status"] = "HOLD"
+            barrier = threading.Barrier(2)
+
+            def publish(receipt: dict[str, object]) -> str:
+                barrier.wait()
+                try:
+                    ellis_wormhole._write_json(output, receipt)
+                except ContractError as exc:
+                    self.assertIn("refusing to overwrite", str(exc))
+                    return "HELD"
+                return "PUBLISHED"
+
+            with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+                outcomes = list(executor.map(publish, receipts))
+
+            self.assertEqual(sorted(outcomes), ["HELD", "PUBLISHED"])
+            self.assertIn(output.read_bytes(), [ellis_wormhole.canonical_bytes(value) for value in receipts])
+            self.assertEqual(list(output.parent.glob(f".{output.name}.*.tmp")), [])
 
 
 if __name__ == "__main__":

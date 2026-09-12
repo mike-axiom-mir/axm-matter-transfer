@@ -30,9 +30,62 @@ python3 experiments/ellis_wormhole.py verify \
   --receipt /tmp/ellis-receipt.json
 ```
 
-The output path is no-replace. Verification checks the receipt digest and then
-re-executes the experiment; changing a result and recalculating its digest is
-therefore insufficient.
+The complete receipt is written to a private same-directory stage and file
+`fsync`ed before a create-only hard link publishes the requested output name.
+The final path is therefore absent until complete bytes are ready; an existing
+file, directory, or symlink—including a dangling symlink—is occupied and is
+never followed or replaced. Ordinary success and failure paths remove their
+stage. Verification checks the receipt digest and then re-executes the
+experiment; changing a result and recalculating its digest is therefore
+insufficient.
+
+### Portable single-file runner
+
+The same experiment can be packaged as one deterministic Python zipapp without
+copying or rewriting the model by hand:
+
+```bash
+python3 tools/build_ellis_zipapp.py build \
+  --output /tmp/ellis-wormhole.pyz \
+  --receipt /tmp/ellis-wormhole.build.json
+
+python3 tools/build_ellis_zipapp.py verify \
+  --artifact /tmp/ellis-wormhole.pyz \
+  --receipt /tmp/ellis-wormhole.build.json \
+  --source experiments/ellis_wormhole.py
+```
+
+The `.pyz` contains the exact current `ellis_wormhole.py` bytes, a minimal
+entrypoint, and bounded machine-readable metadata. It needs only Python 3.11+
+and the standard library. Copy the `.pyz` plus an input JSON file to another
+local directory and run the same `run` / `verify` commands directly against the
+artifact; no repository checkout, package install, account, network, or AI
+model is required at execution time.
+
+The build receipt binds the artifact and packaged provider source by SHA-256.
+The verifier also checks the exact member inventory, stored-member policy,
+entrypoint, embedded metadata, and (when supplied) byte equality with the
+provider source. Re-sealing an artifact with an extra member therefore does not
+make the widened artifact admissible. SHA-256 here is integrity/lineage
+evidence, not authorship authentication or a signature.
+
+The builder publishes the zipapp and build receipt as a recoverable local
+bundle. Both files are staged and file-`fsync`ed before create-only publication;
+the artifact is derived ready-state and the receipt is the commit marker. If a
+process stops after publishing the artifact, a later build from the exact same
+source can verify and reuse those bytes before committing the receipt. A
+different artifact, any occupied receipt path, or a concurrent receipt winner
+is held without replacement. Consumers admit the pair only through `verify`;
+an artifact without its receipt is not a committed bundle.
+
+The pull-request gate also retains the built `.pyz` and build receipt as a
+review artifact. Retention is a review/distribution convenience, not a release,
+promotion, or claim that the artifact is CANON.
+
+This distribution seam applies the same AXM principle used by verified portable
+capsules—carry exact source/evidence with the thing that leaves its checkout—but
+it does not copy implementation code from another repository or create a
+shared runtime dependency.
 
 ### Sources and adaptation
 
@@ -51,5 +104,7 @@ only equations declared in the receipt and Python’s standard library.
 `PASS` means the bounded computational reproduction met its declared gates.
 It does **not** establish stability, quantum-field compatibility, a source for
 the required stress-energy, an actuator, engineering feasibility, physical
-matter transfer, merge authority, or CANON. No biological, destructive,
-weapon, confinement, or hardware experiment is included.
+matter transfer, merge authority, or CANON. Packaging the experiment changes
+none of those claims and grants no automatic execution authority. No
+biological, destructive, weapon, confinement, or hardware experiment is
+included.
