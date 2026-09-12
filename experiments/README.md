@@ -39,6 +39,24 @@ stage. Verification checks the receipt digest and then re-executes the
 experiment; changing a result and recalculating its digest is therefore
 insufficient.
 
+### Human-readable receipt observer
+
+After producing a receipt, render that already-verified evidence into one offline
+HTML file:
+
+```bash
+python3 experiments/ellis_geometry_viewer.py \
+  --input experiments/fixtures/ellis_zero_mass_v1.json \
+  --receipt /tmp/ellis-receipt.json \
+  --output /tmp/ellis-viewer.html
+```
+
+The viewer calls the experiment's deterministic verifier before it writes HTML.
+Its charts use only recorded receipt samples; connecting lines are orientation
+guides, not extra model samples. The page is a presentation layer only: it has
+no network dependency, does not execute the physics model, and cannot promote
+any scientific, engineering, merge, or CANON claim.
+
 ### Portable single-file runner
 
 The same experiment can be packaged as one deterministic Python zipapp without
@@ -104,7 +122,7 @@ only equations declared in the receipt and Python’s standard library.
 `PASS` means the bounded computational reproduction met its declared gates.
 It does **not** establish stability, quantum-field compatibility, a source for
 the required stress-energy, an actuator, engineering feasibility, physical
-matter transfer, merge authority, or CANON. Packaging the experiment changes
-none of those claims and grants no automatic execution authority. No
-biological, destructive, weapon, confinement, or hardware experiment is
-included.
+matter transfer, merge authority, or CANON. Packaging or visualizing the
+experiment changes none of those claims and grants no automatic execution or
+promotion authority. No biological, destructive, weapon, confinement, or
+hardware experiment is included.
