@@ -1,0 +1,52 @@
+name: Ellis geometry receipt experience
+
+on:
+  pull_request:
+    paths:
+      - "experiments/ellis_wormhole.py"
+      - "experiments/ellis_geometry_viewer.py"
+      - "experiments/fixtures/ellis_zero_mass_v1.json"
+      - "experiments/README.md"
+      - "tests/test_ellis_wormhole.py"
+      - "tests/test_ellis_geometry_viewer.py"
+      - "tests/ellis_geometry_viewer_browser.mjs"
+      - ".github/workflows/ellis-geometry-viewer.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  viewer:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Compile experiment and receipt observer
+        run: python -m py_compile experiments/ellis_wormhole.py experiments/ellis_geometry_viewer.py tests/test_ellis_wormhole.py tests/test_ellis_geometry_viewer.py
+      - name: Run experiment and observer contracts
+        run: python -m unittest discover -s tests -v
+      - name: Build independently verified standalone observer
+        run: |
+          python experiments/ellis_wormhole.py run \
+            --input experiments/fixtures/ellis_zero_mass_v1.json \
+            --output "$RUNNER_TEMP/ellis-receipt.json"
+          python experiments/ellis_geometry_viewer.py \
+            --input experiments/fixtures/ellis_zero_mass_v1.json \
+            --receipt "$RUNNER_TEMP/ellis-receipt.json" \
+            --output "$RUNNER_TEMP/ellis-viewer.html"
+      - name: Exercise real observer surface in Chrome
+        env:
+          CHROME_BIN: google-chrome
+        run: node tests/ellis_geometry_viewer_browser.mjs "$RUNNER_TEMP/ellis-viewer.html" "$RUNNER_TEMP/viewer-evidence"
+      - name: Upload retained visual evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: ellis-geometry-viewer-evidence
+          path: ${{ runner.temp }}/viewer-evidence/*.png
+          if-no-files-found: error
