@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="color-scheme" content="dark" />
+  <title>AXM Matter Transfer · Research Map</title>
+  <link rel="stylesheet" href="./research-map.css" />
+</head>
+<body>
+  <div class="ambient" aria-hidden="true"></div>
+  <header class="masthead">
+    <div>
+      <p class="eyebrow">AXM MATTER TRANSFER / LOCAL RESEARCH OBSERVER</p>
+      <h1>Research Map</h1>
+      <p class="subtitle">A read-only realization of the preserved organ registry. It shows what the research architecture says; it does not make the physics true.</p>
+    </div>
+    <div class="authority" aria-label="Authority boundary">
+      <span class="authority-mark">DISPLAY ≠ PROOF</span>
+      <span>presentation authority only</span>
+    </div>
+  </header>
+
+  <main>
+    <section class="truth-strip" aria-labelledby="truth-title">
+      <div>
+        <p class="section-kicker">CURRENT CLAIM CEILING</p>
+        <h2 id="truth-title">Loading preserved research state…</h2>
+        <p id="statusSummary">No claim is upgraded by this observer.</p>
+      </div>
+      <div class="truth-pills" id="truthPills" aria-label="Current status"></div>
+    </section>
+
+    <section class="controls" aria-label="Research map controls">
+      <label class="field wide">
+        <span>Find organ, gate, failure or concept</span>
+        <input id="search" type="search" autocomplete="off" placeholder="/  e.g. causality, uncertainty, identity…" />
+      </label>
+      <label class="field">
+        <span>Assembly profile</span>
+        <select id="profile"><option value="all">Complete research architecture</option></select>
+      </label>
+      <label class="field">
+        <span>Layer</span>
+        <select id="layer"><option value="all">All layers</option></select>
+      </label>
+      <div class="source-state" id="sourceState" role="status" aria-live="polite">Opening local evidence…</div>
+    </section>
+
+    <section class="profile-brief" id="profileBrief" aria-live="polite"></section>
+
+    <section class="workspace">
+      <div class="map-shell" aria-label="Research organ dependency map">
+        <div class="map-head">
+          <div>
+            <p class="section-kicker">RESEARCH BODY</p>
+            <h2 id="resultTitle">Registered organs</h2>
+          </div>
+          <div class="metrics" id="metrics"></div>
+        </div>
+        <div class="layer-grid" id="layerGrid"></div>
+        <div class="empty" id="empty" hidden>No organs match this view. Change the search or filter; the registry itself has not changed.</div>
+      </div>
+
+      <aside class="inspector" aria-labelledby="inspectTitle">
+        <div class="inspector-head">
+          <p class="section-kicker">INSPECT</p>
+          <h2 id="inspectTitle">Select an organ</h2>
+        </div>
+        <div id="inspectorBody" class="inspector-body">
+          <p class="muted">Choose a node to see its purpose, dependencies, hard gates, failure state and executable checks.</p>
+        </div>
+      </aside>
+    </section>
+
+    <section class="truth-floor" aria-labelledby="floorTitle">
+      <div>
+        <p class="section-kicker">NON-DEGRADABLE TRUTH FLOOR</p>
+        <h2 id="floorTitle">What this project refuses to turn into a visual shortcut</h2>
+      </div>
+      <div class="floor-grid" id="truthBoundary"></div>
+    </section>
+
+    <details class="local-loader" id="localLoader">
+      <summary>File-mode fallback · load preserved JSON manually</summary>
+      <p>If this page is opened directly from disk, browsers may block relative JSON reads. Choose the repository files below; nothing is uploaded.</p>
+      <div class="file-row">
+        <label>Organ registry <input id="registryFile" type="file" accept="application/json,.json" /></label>
+        <label>Current focus <input id="focusFile" type="file" accept="application/json,.json" /></label>
+      </div>
+    </details>
+  </main>
+
+  <footer>
+    <span>LOCAL / OFFLINE CAPABLE</span>
+    <span id="registryIdentity">registry identity unavailable</span>
+    <span>NO EXECUTION · NO PROMOTION · NO CANON</span>
+  </footer>
+
+  <script type="module" src="./research-map.js"></script>
+</body>
+</html>
