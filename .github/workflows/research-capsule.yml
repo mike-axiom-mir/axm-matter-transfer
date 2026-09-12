@@ -1,0 +1,31 @@
+name: Research capsule portability
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-capsule:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Compile capsule and resolver tools
+        run: python -m py_compile tools/research_state.py tools/research_capsule.py tests/test_research_state.py tests/test_research_capsule.py
+      - name: Run complete repository tests
+        run: python -m unittest discover -s tests -v
+      - name: Build portable observer capsule
+        run: python tools/research_capsule.py build observer_game_layer --output /tmp/axm-matter-transfer-capsule
+      - name: Verify from an external consumer directory
+        run: |
+          mkdir -p /tmp/independent-consumer
+          cd /tmp/independent-consumer
+          python /tmp/axm-matter-transfer-capsule/verify.py verify /tmp/axm-matter-transfer-capsule
