@@ -1,0 +1,32 @@
+name: Research Map Viewer
+
+on:
+  pull_request:
+    paths:
+      - 'viewer/**'
+      - 'tests/research-map.test.mjs'
+      - 'data/current_focus_v0_2.json'
+      - 'provenance/factual-space-pr2/data/matter_transfer_organ_registry_v0_1.json'
+      - '.github/workflows/research-map.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  viewer-contract:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node: [20, 22]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - name: Syntax
+        run: |
+          node --check viewer/research-map.js
+          node --check viewer/research-map-model.mjs
+      - name: Preserved-data viewer contract
+        run: node --test tests/research-map.test.mjs
